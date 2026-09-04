@@ -252,8 +252,9 @@ kbd { min-width: 26px; border: 1px solid var(--line); border-bottom-width: 2px; 
 .filters-heading button { border: 0; padding: 0; color: var(--coral); background: transparent; cursor: pointer; font-size: 0.72rem; font-weight: 750; }
 .filter-control { display: grid; gap: 7px; margin-top: 14px; }
 .filter-control > span { color: var(--muted); font-size: 0.7rem; font-weight: 750; }
-select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; outline: none; padding: 10px 30px 10px 10px; color: var(--ink); background: var(--white); font-size: 0.78rem; }
-select:focus, textarea:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(23, 55, 45, 0.08); }
+select, .filter-control input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; outline: none; padding: 10px 30px 10px 10px; color: var(--ink); background: var(--white); font-size: 0.78rem; }
+.filter-control input { padding-right: 10px; }
+select:focus, textarea:focus, .filter-control input:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(23, 55, 45, 0.08); }
 
 .toggle-control { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; margin-top: 19px; cursor: pointer; color: var(--muted); font-size: 0.74rem; }
 .toggle-control input { position: absolute; opacity: 0; pointer-events: none; }
@@ -344,6 +345,9 @@ select:focus, textarea:focus { border-color: var(--forest); box-shadow: 0 0 0 3p
 .company-roles { display: grid; gap: 7px; max-height: 240px; overflow: auto; }
 .company-role { display: block; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 9px 10px; color: rgba(255,255,255,.75); background: rgba(255,255,255,.04); text-decoration: none; font-size: .67rem; line-height: 1.35; }
 .company-role:hover { border-color: var(--signal); color: white; }
+.related-role { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.related-role span { display: block; margin-top: 4px; color: rgba(255,255,255,.4); font-size: .59rem; }
+.related-role:hover span { color: rgba(255,255,255,.7); }
 .review-grid { display: grid; gap: 10px; }
 .review-grid label span { display: block; margin-bottom: 6px; color: rgba(255,255,255,.46); font-size: .64rem; }
 .review-grid select, .review-grid textarea { border-color: rgba(255,255,255,.14); color: white; background: rgba(255,255,255,.07); }

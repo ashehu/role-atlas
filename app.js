@@ -13,6 +13,7 @@ const browserStateKey = "role-atlas-review-state-v1";
 
 const elements = {
   search: document.getElementById("searchInput"),
+  title: document.getElementById("titleFilter"),
   lane: document.getElementById("laneFilter"),
   provider: document.getElementById("providerFilter"),
   resume: document.getElementById("resumeFilter"),
@@ -207,6 +208,48 @@ function searchText(row) {
   ].join(" ").toLowerCase();
 }
 
+const roleStopWords = new Set(["a", "an", "and", "for", "of", "the", "to", "with", "senior", "sr", "junior", "jr", "lead", "staff", "principal", "i", "ii", "iii"]);
+
+function roleTokens(row) {
+  return new Set(
+    display(row.role, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9+#]+/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 1 && !roleStopWords.has(token))
+  );
+}
+
+function sharedRoleTokens(first, second) {
+  const secondTokens = roleTokens(second);
+  return [...roleTokens(first)].filter((token) => secondTokens.has(token));
+}
+
+function roleSimilarity(target, candidate) {
+  let score = sharedRoleTokens(target, candidate).length * 3;
+  if (target.lane && target.lane === candidate.lane) score += 6;
+  if (target.title_family && target.title_family === candidate.title_family) score += 5;
+  if (isInactive(candidate)) score -= 2;
+  return score;
+}
+
+function similarityReason(target, candidate) {
+  if (target.title_family && target.title_family === candidate.title_family) return "Same title family";
+  if (target.lane && target.lane === candidate.lane) return `Related ${laneName(candidate).toLowerCase()} role`;
+  const shared = sharedRoleTokens(target, candidate).slice(0, 2);
+  return shared.length ? `Shared focus: ${shared.join(" + ")}` : "Another company opening";
+}
+
+function similarCompanyRoles(target) {
+  return allRecords
+    .filter((candidate) => candidate.record_id !== target.record_id && companyKey(candidate) === companyKey(target))
+    .map((candidate) => ({ candidate, score: roleSimilarity(target, candidate) }))
+    .filter(({ score }) => score > 0)
+    .sort((first, second) => second.score - first.score || Number(isInactive(first.candidate)) - Number(isInactive(second.candidate)))
+    .slice(0, 5)
+    .map(({ candidate }) => candidate);
+}
+
 function sortRows(rows) {
   const mode = elements.sort.value;
   return [...rows].sort((a, b) => {
@@ -218,12 +261,26 @@ function sortRows(rows) {
   });
 }
 
-function applyFilters() {
+function setViewMode(nextMode, render = true) {
+  viewMode = nextMode;
+  document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === viewMode));
+  visibleLimit = 60;
+  if (render) renderResults();
+}
+
+function applyFilters({ preserveView = false } = {}) {
   const query = elements.search.value.trim().toLowerCase();
+  const titleQuery = elements.title.value.trim().toLowerCase();
   const lane = elements.lane.value;
   const provider = elements.provider.value;
   const resume = elements.resume.value;
   const status = elements.status.value;
+
+  const hasNarrowingFilter = Boolean(
+    query || titleQuery || lane !== "all" || provider !== "all" || resume !== "all" || status !== "all" ||
+    elements.activeOnly.checked || locationMode !== "all" || scopeMode !== "all"
+  );
+  if (!preserveView) setViewMode(hasNarrowingFilter ? "roles" : "companies", false);
 
   filteredRecords = sortRows(allRecords.filter((row) => {
     const state = applicationState(row);
@@ -239,6 +296,7 @@ function applyFilters() {
     if (status !== "all" && state !== status) return false;
     if (elements.activeOnly.checked && isInactive(row)) return false;
     if (query && !searchText(row).includes(query)) return false;
+    if (titleQuery && !String(row.role || "").toLowerCase().includes(titleQuery)) return false;
     return true;
   }));
 
@@ -393,7 +451,12 @@ function renderRoleDetail(id) {
   if (!row) return renderEmptyDetail();
   const companyRoles = allRecords.filter((item) => companyKey(item) === companyKey(row));
   const state = applicationState(row);
-  const knownRoles = companyRoles.slice(0, 12).map((item) => `<a class="company-role" href="${escapeHtml(roleUrl(item))}" target="_blank" rel="noreferrer">${escapeHtml(display(item.role))}</a>`).join("");
+  const relatedRoles = similarCompanyRoles(row);
+  const relatedMarkup = relatedRoles.map((item) => `
+    <button class="company-role related-role" data-related-id="${escapeHtml(item.record_id)}" type="button">
+      <strong>${escapeHtml(display(item.role))}</strong>
+      <span>${escapeHtml(display(item.location, "Location not listed"))} · ${escapeHtml(similarityReason(row, item))}</span>
+    </button>`).join("");
 
   elements.detail.innerHTML = `
     <div class="inspector-top">
@@ -412,7 +475,7 @@ function renderRoleDetail(id) {
     <section class="detail-section"><h3>Application fit</h3><div class="detail-list">
       ${detailRow("Location", display(row.location))}${detailRow("Role family", laneName(row))}
       ${staticMode ? "" : detailRow("Resume", resumeName(row))}${detailRow("First sourced", formatDate(row.first_seen))}
-      ${detailRow("Platform", providerName(row))}${detailRow("Other roles", `${companyRoles.length} at this company`)}
+      ${detailRow("Platform", providerName(row))}${detailRow("Other roles", `${Math.max(companyRoles.length - 1, 0)} at this company`)}
     </div></section>
     <section class="detail-section"><h3>Your application workflow</h3><div class="review-grid">
       <label><span>State</span><select id="reviewStatus">${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${state === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
@@ -420,7 +483,9 @@ function renderRoleDetail(id) {
       <div class="save-row"><button class="save-button" id="saveReview" type="button">Save update</button><span class="save-meta">${row.updated_at ? `Saved ${escapeHtml(formatDate(row.updated_at))}` : "Stored locally"}</span></div>
     </div></section>
     ${row.notes ? `<section class="detail-section"><h3>Research notes</h3><p class="tracker-note">${escapeHtml(row.notes)}</p></section>` : ""}
-    ${companyRoles.length > 1 ? `<section class="detail-section"><h3>More at ${escapeHtml(display(row.company))}</h3><div class="company-roles">${knownRoles}</div></section>` : ""}
+    ${relatedRoles.length
+      ? `<section class="detail-section"><h3>Similar at ${escapeHtml(display(row.company))}</h3><div class="company-roles">${relatedMarkup}</div></section>`
+      : `<section class="detail-section"><h3>More at ${escapeHtml(display(row.company))}</h3><p class="tracker-note">No closely related role is in the sourced index yet. Use “All company jobs” above to check the full hiring board.</p></section>`}
     ${detailMeta(row)}
   `;
   wireInspector();
@@ -445,6 +510,12 @@ function wireInspector() {
   elements.detail.querySelector(".close-inspector")?.addEventListener("click", () => elements.detail.classList.remove("open"));
   elements.detail.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyLink(button.dataset.copy)));
   elements.detail.querySelectorAll("[data-save-id]").forEach((button) => button.addEventListener("click", () => toggleSaved(button.dataset.saveId)));
+  elements.detail.querySelectorAll("[data-related-id]").forEach((button) => button.addEventListener("click", () => {
+    selectedId = button.dataset.relatedId;
+    selectedCompanyKey = null;
+    renderResults();
+    renderRoleDetail(selectedId);
+  }));
 }
 
 async function persistReview(row, comment, reviewStatus) {
@@ -481,7 +552,7 @@ async function saveCurrentReview() {
   try {
     await persistReview(row, document.getElementById("commentBox").value.trim(), document.getElementById("reviewStatus").value);
     showToast("Application update saved");
-    applyFilters();
+    applyFilters({ preserveView: true });
     renderRoleDetail(row.record_id);
   } catch (error) {
     showToast(error.message || "Could not save");
@@ -497,7 +568,7 @@ async function toggleSaved(id) {
   try {
     await persistReview(row, row.comment || "", next);
     showToast(next === "saved" ? "Saved to your shortlist" : "Removed from shortlist");
-    applyFilters();
+    applyFilters({ preserveView: true });
     if (selectedId === id) renderRoleDetail(id);
     else if (selectedCompanyKey) renderCompanyDetail(selectedCompanyKey);
   } catch (error) {
@@ -532,6 +603,7 @@ function updateCounts() {
 function renderActiveFilters() {
   const chips = [];
   if (elements.search.value.trim()) chips.push(`Search: ${elements.search.value.trim()}`);
+  if (elements.title.value.trim()) chips.push(`Title: ${elements.title.value.trim()}`);
   if (locationMode !== "all") chips.push(locationMode === "nyc" ? "New York City" : "Remote");
   if (elements.lane.value !== "all") chips.push(laneLabels[elements.lane.value] || elements.lane.value);
   if (elements.provider.value !== "all") chips.push(providerName({ provider: elements.provider.value }));
@@ -543,6 +615,7 @@ function renderActiveFilters() {
 
 function clearFilters() {
   elements.search.value = "";
+  elements.title.value = "";
   elements.lane.value = "all";
   elements.provider.value = "all";
   elements.resume.value = "all";
@@ -550,7 +623,8 @@ function clearFilters() {
   elements.activeOnly.checked = false;
   locationMode = "all";
   document.querySelectorAll("[data-location]").forEach((button) => button.classList.toggle("active", button.dataset.location === "all"));
-  applyFilters();
+  setViewMode(scopeMode === "all" ? "companies" : "roles", false);
+  applyFilters({ preserveView: true });
 }
 
 function exportView() {
@@ -576,20 +650,18 @@ function showToast(message) {
 }
 
 function wireEvents() {
-  [elements.search, elements.lane, elements.provider, elements.resume, elements.status, elements.activeOnly, elements.sort].forEach((control) => {
+  [elements.search, elements.title, elements.lane, elements.provider, elements.resume, elements.status, elements.activeOnly].forEach((control) => {
     control.addEventListener("input", applyFilters);
     control.addEventListener("change", applyFilters);
   });
+  elements.sort.addEventListener("change", () => applyFilters({ preserveView: true }));
   elements.clearFilters.addEventListener("click", clearFilters);
   elements.exportButton.addEventListener("click", exportView);
   elements.filterToggle.addEventListener("click", () => elements.filtersPane.classList.toggle("open"));
   elements.loadMore.addEventListener("click", () => { visibleLimit += 60; renderResults(); });
 
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => {
-    viewMode = button.dataset.view;
-    document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("active", item === button));
-    visibleLimit = 60;
-    renderResults();
+    setViewMode(button.dataset.view);
   }));
   document.querySelectorAll("[data-location]").forEach((button) => button.addEventListener("click", () => {
     locationMode = button.dataset.location;
