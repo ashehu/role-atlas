@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-static-build="true">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#17372d" />
+    <meta name="description" content="Explore direct company roles and keep your job search moving." />
+    <title>Role Atlas</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <a class="brand" href="#" aria-label="Role Atlas home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>Role Atlas</span>
+        </a>
+        <nav class="rail-nav" aria-label="Workspace views">
+          <button class="nav-item active" data-scope="all" type="button">
+            <span class="nav-icon">⌁</span>Explore<span class="nav-count" id="allCount">0</span>
+          </button>
+          <button class="nav-item" data-scope="saved" type="button">
+            <span class="nav-icon">◇</span>Saved<span class="nav-count" id="savedCount">0</span>
+          </button>
+          <button class="nav-item" data-scope="applied" type="button">
+            <span class="nav-icon">✓</span>Applied<span class="nav-count" id="appliedCount">0</span>
+          </button>
+        </nav>
+        <div class="rail-card">
+          <span class="live-dot"></span>
+          <p class="rail-card-label">Your private workspace</p>
+          <strong>No account required</strong>
+          <p>Notes and application states stay on this machine.</p>
+        </div>
+        <div class="rail-footer">
+          <span>Dataset refreshed</span>
+          <strong id="datasetDate">—</strong>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topline">
+          <p><span class="topline-dot"></span>Direct company opportunities</p>
+          <div class="topline-actions">
+            <button class="ghost-button" id="exportButton" type="button">Export view</button>
+            <button class="icon-button mobile-filters" id="filterToggle" type="button" aria-label="Toggle filters">☰</button>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">The company-first job search</p>
+            <h1>Find the company.<br /><em>Then find your way in.</em></h1>
+            <p class="hero-subhead">
+              Thousands of previously sourced roles, organized by employer and hiring platform so you can skip the
+              search loop and get to the real opportunity.
+            </p>
+          </div>
+          <div class="hero-orbit" aria-hidden="true">
+            <span class="orbit-ring ring-one"></span><span class="orbit-ring ring-two"></span>
+            <span class="orbit-core">RA</span><span class="orbit-label label-one">ASHBY</span>
+            <span class="orbit-label label-two">LEVER</span><span class="orbit-label label-three">GREENHOUSE</span>
+          </div>
+        </section>
+
+        <section class="search-panel" aria-label="Search opportunities">
+          <label class="search-box" for="searchInput">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search companies, roles, skills, locations..." />
+            <kbd>/</kbd>
+          </label>
+          <div class="location-tabs" role="group" aria-label="Location">
+            <button class="segment active" data-location="all" type="button">Anywhere</button>
+            <button class="segment" data-location="nyc" type="button">NYC</button>
+            <button class="segment" data-location="remote" type="button">Remote</button>
+          </div>
+        </section>
+
+        <section class="signal-strip" id="stats" aria-label="Dataset summary"></section>
+
+        <section class="workspace">
+          <aside class="filters" id="filtersPane">
+            <div class="filters-heading">
+              <div><p class="eyebrow">Refine</p><h2>Make it yours</h2></div>
+              <button id="clearFilters" type="button">Reset</button>
+            </div>
+            <label class="filter-control"><span>Role family</span><select id="laneFilter"></select></label>
+            <label class="filter-control"><span>Hiring platform</span><select id="providerFilter"></select></label>
+            <label class="filter-control filter-resume"><span>Resume match</span><select id="resumeFilter"></select></label>
+            <label class="filter-control">
+              <span>Application state</span>
+              <select id="statusFilter">
+                <option value="all">All states</option><option value="new">Not reviewed</option>
+                <option value="saved">Saved</option><option value="ready">Ready to apply</option>
+                <option value="applying">Applying</option><option value="applied">Applied</option>
+                <option value="interviewing">Interviewing</option><option value="skip">Skipped</option>
+              </select>
+            </label>
+            <label class="toggle-control">
+              <input id="activeOnly" type="checkbox" /><span class="toggle-track"><i></i></span><span>Hide inactive links</span>
+            </label>
+            <div class="platform-note"><span>Why company boards?</span><p>One sourced role can unlock every opening the company publishes on its ATS.</p></div>
+          </aside>
+
+          <div class="results-column">
+            <div class="results-header">
+              <div><p class="eyebrow">Opportunity map</p><h2 id="resultCount">0 roles</h2></div>
+              <div class="result-tools">
+                <label class="sort-control"><span>Sort</span><select id="sortSelect">
+                  <option value="recent">Recently sourced</option><option value="company">Company A–Z</option>
+                  <option value="role">Role A–Z</option>
+                </select></label>
+                <div class="view-switch" role="group" aria-label="Result view">
+                  <button class="active" data-view="companies" type="button">Companies</button>
+                  <button data-view="roles" type="button">Roles</button>
+                </div>
+              </div>
+            </div>
+            <div id="activeFilters" class="active-filters" aria-live="polite"></div>
+            <div id="results" class="results-grid"></div>
+            <button id="loadMore" class="load-more" type="button">Show more</button>
+          </div>
+
+          <aside class="inspector" id="detailPane" aria-live="polite">
+            <div class="empty-state"><span class="empty-mark">↗</span><h2>Pick an opportunity</h2>
+              <p>See the direct application, the full company job board, role details, and your private notes.</p></div>
+          </aside>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
