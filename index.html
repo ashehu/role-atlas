@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#17372d" />
-    <meta name="description" content="Explore direct company roles and keep your job search moving." />
+    <meta name="description" content="Find overlooked roles directly from company career pages and hiring systems." />
     <title>Role Atlas</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -30,26 +30,27 @@
           <span class="live-dot"></span>
           <p class="rail-card-label">Your private workspace</p>
           <strong>No account required</strong>
-          <p>Notes and application states stay on this machine.</p>
+          <p>Notes and application states stay in this browser. Export to keep a backup.</p>
         </div>
         <div class="rail-footer">
-          <span>Dataset refreshed</span>
+          <span>Latest role added</span>
           <strong id="datasetDate">—</strong>
         </div>
       </aside>
 
       <main class="main">
         <header class="topline">
-          <p><span class="topline-dot"></span>Direct company opportunities</p>
+          <p><span class="topline-dot"></span>AI roles found at the source</p>
           <div class="topline-actions">
+            <a class="ghost-button browse-link" href="#opportunities">Browse roles</a>
             <button class="ghost-button" id="exportButton" type="button">Export view</button>
-            <button class="icon-button mobile-filters" id="filterToggle" type="button" aria-label="Toggle filters">☰</button>
+            <button class="icon-button mobile-filters" id="filterToggle" type="button" aria-label="Show filters" aria-expanded="false">☰</button>
           </div>
         </header>
 
         <section class="hero">
           <div class="hero-copy">
-            <h1>Your AI agent, working behind the scenes to find hidden signals and get you in front of the right people.</h1>
+            <h1>Your AI agent, uncovering roles others miss and helping you reach the right people.</h1>
           </div>
           <div class="hero-orbit" aria-hidden="true">
             <span class="orbit-ring ring-one"></span><span class="orbit-ring ring-two"></span>
@@ -61,27 +62,55 @@
         <section class="search-panel" aria-label="Search opportunities">
           <label class="search-box" for="searchInput">
             <span class="search-icon" aria-hidden="true">⌕</span>
-            <input id="searchInput" type="search" autocomplete="off" placeholder="Search companies, roles, skills, locations..." />
+            <input id="searchInput" type="search" autocomplete="off" aria-label="Search roles and companies" placeholder="Search roles, companies, skills, or locations..." />
             <kbd>/</kbd>
           </label>
           <div class="location-tabs" role="group" aria-label="Location">
-            <button class="segment active" data-location="all" type="button">Anywhere</button>
-            <button class="segment" data-location="nyc" type="button">NYC</button>
-            <button class="segment" data-location="remote" type="button">Remote</button>
+            <button class="segment active" data-location="all" type="button" aria-pressed="true">Anywhere</button>
+            <button class="segment" data-location="nyc" type="button" aria-pressed="false">NYC</button>
+            <button class="segment" data-location="remote" type="button" aria-pressed="false">Remote</button>
           </div>
         </section>
 
-        <section class="signal-strip" id="stats" aria-label="Dataset summary"></section>
+        <details class="source-story">
+          <summary>Not every good role becomes a LinkedIn ad.</summary>
+          <p>Role Atlas goes straight to company career pages and hiring systems, including startups that may not promote every opening. Find the role, open the direct application, and see other ways into the same company.</p>
+          <div class="source-path" aria-label="Direct job discovery path">
+            <span>Company sites</span><i>→</i><span>Hiring systems</span><i>→</i><span>Direct roles</span>
+          </div>
+        </details>
 
-        <section class="workspace">
+        <section class="signal-strip" id="stats" aria-label="Dataset summary"></section>
+        <details class="freshness-guide">
+          <summary>How fresh are these roles?</summary>
+          <p>Verified means the employer's public hiring system or job page confirmed the opening within the last 14 days. Newly sourced does not mean verified. AI, machine learning, data science, and forward-deployed roles are included in the AI focus.</p>
+          <p>A missing role is flagged first, then archived after a second definitive check on a later day. Blocked pages and timeouts need verification. Archived roles remain in the index with your notes; use the freshness filter to see them.</p>
+        </details>
+
+        <section class="workspace" id="opportunities">
           <aside class="filters" id="filtersPane">
             <div class="filters-heading">
               <div><p class="eyebrow">Refine</p><h2>Make it yours</h2></div>
               <button id="clearFilters" type="button">Reset</button>
             </div>
+            <label class="toggle-control primary-toggle">
+              <input id="aiOnly" type="checkbox" checked /><span class="toggle-track"><i></i></span><span>AI-focused roles</span>
+            </label>
             <label class="filter-control"><span>Job title contains</span><input id="titleFilter" type="search" autocomplete="off" placeholder="e.g. solutions engineer" /></label>
             <label class="filter-control"><span>Role family</span><select id="laneFilter"></select></label>
             <label class="filter-control"><span>Hiring platform</span><select id="providerFilter"></select></label>
+            <label class="filter-control">
+              <span>Freshness</span>
+              <select id="freshnessFilter">
+                <option value="all">All freshness levels</option>
+                <option value="fresh">Verified within 14 days</option>
+                <option value="aging">Recheck soon</option>
+                <option value="stale">Recheck due</option>
+                <option value="inactive">Marked inactive</option>
+                <option value="unknown">Needs verification</option>
+                <option value="suspect">May be closed</option>
+              </select>
+            </label>
             <label class="filter-control filter-resume"><span>Resume match</span><select id="resumeFilter"></select></label>
             <label class="filter-control">
               <span>Application state</span>
@@ -93,9 +122,9 @@
               </select>
             </label>
             <label class="toggle-control">
-              <input id="activeOnly" type="checkbox" /><span class="toggle-track"><i></i></span><span>Hide inactive links</span>
+              <input id="activeOnly" type="checkbox" checked /><span class="toggle-track"><i></i></span><span>Hide marked inactive</span>
             </label>
-            <div class="platform-note"><span>Why company boards?</span><p>One sourced role can unlock every opening the company publishes on its ATS.</p></div>
+            <div class="platform-note"><span>One role is a signal</span><p>Open the company board to find related opportunities beyond the original listing.</p></div>
           </aside>
 
           <div class="results-column">
@@ -103,12 +132,12 @@
               <div><p class="eyebrow">Opportunity map</p><h2 id="resultCount">0 roles</h2></div>
               <div class="result-tools">
                 <label class="sort-control"><span>Sort</span><select id="sortSelect">
-                  <option value="recent">Recently sourced</option><option value="company">Company A–Z</option>
+                  <option value="verified">Verified first</option><option value="recent">Recently sourced</option><option value="company">Company A–Z</option>
                   <option value="role">Role A–Z</option>
                 </select></label>
                 <div class="view-switch" role="group" aria-label="Result view">
-                  <button class="active" data-view="companies" type="button">Companies</button>
-                  <button data-view="roles" type="button">Roles</button>
+                  <button class="active" data-view="companies" type="button" aria-pressed="true">Companies</button>
+                  <button data-view="roles" type="button" aria-pressed="false">Roles</button>
                 </div>
               </div>
             </div>
@@ -117,13 +146,14 @@
             <button id="loadMore" class="load-more" type="button">Show more</button>
           </div>
 
-          <aside class="inspector" id="detailPane" aria-live="polite">
+          <aside class="inspector" id="detailPane" aria-label="Opportunity details">
             <div class="empty-state"><span class="empty-mark">↗</span><h2>Pick an opportunity</h2>
               <p>See the direct application, the full company job board, role details, and your private notes.</p></div>
           </aside>
         </section>
       </main>
     </div>
+    <button class="detail-backdrop" id="detailBackdrop" type="button" tabindex="-1" aria-label="Close details" hidden></button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
   </body>

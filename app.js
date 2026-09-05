@@ -13,9 +13,11 @@ const browserStateKey = "role-atlas-review-state-v1";
 
 const elements = {
   search: document.getElementById("searchInput"),
+  aiOnly: document.getElementById("aiOnly"),
   title: document.getElementById("titleFilter"),
   lane: document.getElementById("laneFilter"),
   provider: document.getElementById("providerFilter"),
+  freshness: document.getElementById("freshnessFilter"),
   resume: document.getElementById("resumeFilter"),
   status: document.getElementById("statusFilter"),
   activeOnly: document.getElementById("activeOnly"),
@@ -23,6 +25,7 @@ const elements = {
   results: document.getElementById("results"),
   resultCount: document.getElementById("resultCount"),
   detail: document.getElementById("detailPane"),
+  detailBackdrop: document.getElementById("detailBackdrop"),
   stats: document.getElementById("stats"),
   activeFilters: document.getElementById("activeFilters"),
   clearFilters: document.getElementById("clearFilters"),
@@ -75,6 +78,18 @@ const statusLabels = {
   interviewing: "Interviewing",
   skip: "Skipped",
 };
+
+const freshnessLabels = {
+  fresh: "Verified within 14 days",
+  aging: "Recheck soon",
+  stale: "Recheck due",
+  inactive: "Marked inactive",
+  unknown: "Needs verification",
+  suspect: "May be closed",
+};
+
+const coreAiLanes = new Set(["applied_ai", "data_science", "product_ai"]);
+const aiRolePattern = /\b(ai|ml|llm|genai|nlp|rag)\b|artificial intelligence|machine learning|deep learning|generative|agentic|data scien|applied scientist|research scientist|forward[- ]deployed|deployment strategist|data platform|ml platform|computer vision|natural language|retrieval augmented/i;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -148,13 +163,44 @@ function hydrateBrowserState() {
 }
 
 function isInactive(row) {
+  if (row.check_version) return row.active_status === "inactive";
   if (row.link_inactive === true) return true;
   const state = `${row.active_status || ""} ${row.current_status || ""} ${row.inactive_reason || ""}`.toLowerCase();
   return state.includes("inactive") || state.includes("closed") || state.includes("expired") || state.includes("job not found");
 }
 
+function isAiFocused(row) {
+  return coreAiLanes.has(String(row.lane || "")) || aiRolePattern.test(String(row.role || ""));
+}
+
+function parseRecordDate(value) {
+  if (!value) return null;
+  const date = new Date(String(value).slice(0, 10) + "T12:00:00");
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysSince(date) {
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+}
+
+function freshnessState(row) {
+  if (isInactive(row)) return "inactive";
+  if (row.active_status === "suspect") return "suspect";
+  if (row.last_result === "uncertain") return "unknown";
+  const evidence = parseRecordDate(row.last_verified);
+  if (!evidence) return "unknown";
+  const age = daysSince(evidence);
+  if (age <= 14) return "fresh";
+  if (age <= 45) return "aging";
+  return "stale";
+}
+
+function freshnessLabel(row) {
+  return freshnessLabels[freshnessState(row)];
+}
+
 function isRemote(row) {
-  return /remote|anywhere|united states/i.test(String(row.location || ""));
+  return /\bremote\b|anywhere|work from home/i.test(String(row.location || ""));
 }
 
 function initials(company) {
@@ -243,6 +289,7 @@ function similarityReason(target, candidate) {
 function similarCompanyRoles(target) {
   return allRecords
     .filter((candidate) => candidate.record_id !== target.record_id && companyKey(candidate) === companyKey(target))
+    .filter((candidate) => !elements.activeOnly.checked || !isInactive(candidate))
     .map((candidate) => ({ candidate, score: roleSimilarity(target, candidate) }))
     .filter(({ score }) => score > 0)
     .sort((first, second) => second.score - first.score || Number(isInactive(first.candidate)) - Number(isInactive(second.candidate)))
@@ -253,6 +300,13 @@ function similarCompanyRoles(target) {
 function sortRows(rows) {
   const mode = elements.sort.value;
   return [...rows].sort((a, b) => {
+    if (mode === "verified") {
+      const ranks = { fresh: 0, aging: 1, stale: 2, unknown: 3, suspect: 4, inactive: 5 };
+      const priority = ranks[freshnessState(a)] - ranks[freshnessState(b)];
+      if (priority) return priority;
+      const checked = String(b.last_verified || "").localeCompare(String(a.last_verified || ""));
+      if (checked) return checked;
+    }
     if (mode === "company") return display(a.company).localeCompare(display(b.company)) || display(a.role).localeCompare(display(b.role));
     if (mode === "role") return display(a.role).localeCompare(display(b.role)) || display(a.company).localeCompare(display(b.company));
     const aDate = String(a.last_seen || a.last_sourced_at || a.first_seen || "");
@@ -263,7 +317,11 @@ function sortRows(rows) {
 
 function setViewMode(nextMode, render = true) {
   viewMode = nextMode;
-  document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === viewMode));
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    const active = button.dataset.view === viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
   visibleLimit = 60;
   if (render) renderResults();
 }
@@ -273,11 +331,12 @@ function applyFilters({ preserveView = false } = {}) {
   const titleQuery = elements.title.value.trim().toLowerCase();
   const lane = elements.lane.value;
   const provider = elements.provider.value;
+  const freshness = elements.freshness.value;
   const resume = elements.resume.value;
   const status = elements.status.value;
 
   const hasNarrowingFilter = Boolean(
-    query || titleQuery || lane !== "all" || provider !== "all" || resume !== "all" || status !== "all" ||
+    query || titleQuery || elements.aiOnly.checked || lane !== "all" || provider !== "all" || freshness !== "all" || resume !== "all" || status !== "all" ||
     elements.activeOnly.checked || locationMode !== "all" || scopeMode !== "all"
   );
   if (!preserveView) setViewMode(hasNarrowingFilter ? "roles" : "companies", false);
@@ -290,8 +349,10 @@ function applyFilters({ preserveView = false } = {}) {
     if (scopeMode === "applied" && !["applied", "interviewing"].includes(state)) return false;
     if (locationMode === "nyc" && row.is_nyc !== "true" && row.is_nyc !== true) return false;
     if (locationMode === "remote" && !isRemote(row)) return false;
+    if (elements.aiOnly.checked && !isAiFocused(row)) return false;
     if (lane !== "all" && row.lane !== lane) return false;
     if (provider !== "all" && rowProvider !== provider) return false;
+    if (freshness !== "all" && freshnessState(row) !== freshness) return false;
     if (resume !== "all" && rowResume !== resume) return false;
     if (status !== "all" && state !== status) return false;
     if (elements.activeOnly.checked && isInactive(row)) return false;
@@ -313,6 +374,7 @@ function groupCompanies(rows) {
     if (!companies.has(key)) companies.set(key, { key, company: display(row.company), roles: [] });
     companies.get(key).roles.push(row);
   });
+  if (elements.sort.value === "verified") return [...companies.values()];
   return [...companies.values()].sort((a, b) => {
     if (elements.sort.value === "recent") {
       const aDate = String(a.roles[0]?.last_seen || a.roles[0]?.first_seen || "");
@@ -350,7 +412,7 @@ function renderCompanyCard(group, index) {
   const isSaved = group.roles.some((row) => ["saved", "ready", "applying"].includes(applicationState(row)));
   const rolePills = group.roles.slice(0, 3).map((row) => `<span class="role-pill">${escapeHtml(display(row.role))}</span>`).join("");
   return `
-    <article class="result-card company-card ${selectedCompanyKey === group.key ? "active" : ""}" data-company="${escapeHtml(group.key)}" style="animation-delay:${Math.min(index * 18, 220)}ms">
+    <article class="result-card company-card ${selectedCompanyKey === group.key ? "active" : ""}" data-company="${escapeHtml(group.key)}" tabindex="0" aria-label="View ${escapeHtml(group.company)} and ${group.roles.length} sourced roles" style="animation-delay:${Math.min(index * 18, 220)}ms">
       <div class="company-mark">${escapeHtml(initials(group.company))}</div>
       <div class="result-main">
         <div class="result-company"><span class="provider-badge">${escapeHtml(providers.slice(0, 2).join(" + "))}</span>${escapeHtml(display(primary.location, "Multiple locations"))}</div>
@@ -369,14 +431,14 @@ function renderRoleCard(row, index) {
   const state = applicationState(row);
   const saved = ["saved", "ready", "applying"].includes(state);
   return `
-    <article class="result-card ${selectedId === row.record_id ? "active" : ""}" data-id="${escapeHtml(row.record_id)}" style="animation-delay:${Math.min(index * 18, 220)}ms">
+    <article class="result-card ${selectedId === row.record_id ? "active" : ""}" data-id="${escapeHtml(row.record_id)}" tabindex="0" aria-label="View ${escapeHtml(display(row.role))} at ${escapeHtml(display(row.company))}" style="animation-delay:${Math.min(index * 18, 220)}ms">
       <div class="company-mark">${escapeHtml(initials(row.company))}</div>
       <div class="result-main">
         <div class="result-company">${escapeHtml(display(row.company))}<span class="provider-badge">${escapeHtml(providerName(row))}</span></div>
         <h3 class="result-title">${escapeHtml(display(row.role))}</h3>
         <div class="result-meta">
           <span>${escapeHtml(display(row.location, "Location not listed"))}</span>
-          <span><i class="status-dot ${isInactive(row) ? "" : "active"}"></i>${isInactive(row) ? "Needs recheck" : "Direct link"}</span>
+          <span><i class="status-dot ${freshnessState(row)}"></i>${escapeHtml(freshnessLabel(row))}</span>
           <span><i class="status-dot ${state === "applied" ? "applied" : ""}"></i>${escapeHtml(statusLabels[state])}</span>
         </div>
       </div>
@@ -388,21 +450,33 @@ function renderRoleCard(row, index) {
 }
 
 function wireResultCards() {
+  const activateCardWithKeyboard = (card, callback) => {
+    card.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && event.target === card) {
+        event.preventDefault();
+        callback();
+      }
+    });
+  };
   elements.results.querySelectorAll("[data-company]").forEach((card) => {
-    card.addEventListener("click", () => {
+    const selectCompany = () => {
       selectedCompanyKey = card.dataset.company;
       selectedId = null;
       renderResults();
       renderCompanyDetail(selectedCompanyKey);
-    });
+    };
+    card.addEventListener("click", selectCompany);
+    activateCardWithKeyboard(card, selectCompany);
   });
   elements.results.querySelectorAll("[data-id]").forEach((card) => {
-    card.addEventListener("click", () => {
+    const selectRole = () => {
       selectedId = card.dataset.id;
       selectedCompanyKey = null;
       renderResults();
       renderRoleDetail(selectedId);
-    });
+    };
+    card.addEventListener("click", selectRole);
+    activateCardWithKeyboard(card, selectRole);
   });
   elements.results.querySelectorAll("a, button").forEach((control) => control.addEventListener("click", (event) => event.stopPropagation()));
   elements.results.querySelectorAll("[data-save-id]").forEach((button) => {
@@ -412,6 +486,30 @@ function wireResultCards() {
 
 function openInspector() {
   elements.detail.classList.add("open");
+  elements.detail.scrollTop = 0;
+  syncInspectorMode();
+  requestAnimationFrame(() => {
+    if (!elements.detailBackdrop.hidden) elements.detail.querySelector(".close-inspector")?.focus({ preventScroll: true });
+  });
+}
+
+function syncInspectorMode() {
+  const modal = matchMedia("(max-width: 1480px)").matches && elements.detail.classList.contains("open");
+  elements.detailBackdrop.hidden = !modal;
+  document.body.classList.toggle("detail-open", modal);
+  if (modal) {
+    elements.detail.setAttribute("role", "dialog");
+    elements.detail.setAttribute("aria-modal", "true");
+  } else {
+    elements.detail.removeAttribute("role");
+    elements.detail.removeAttribute("aria-modal");
+  }
+}
+
+function closeInspector() {
+  elements.detail.classList.remove("open");
+  syncInspectorMode();
+  elements.results.querySelector(".result-card.active")?.focus({ preventScroll: true });
 }
 
 function renderCompanyDetail(key) {
@@ -419,7 +517,7 @@ function renderCompanyDetail(key) {
   if (!roles.length) return renderEmptyDetail();
   const primary = roles.find((row) => !isInactive(row)) || roles[0];
   const providers = [...new Set(roles.map(providerName))];
-  const active = roles.filter((row) => !isInactive(row)).length;
+  const active = roles.filter((row) => freshnessState(row) === "fresh").length;
   const list = roles
     .sort((a, b) => display(a.role).localeCompare(display(b.role)))
     .slice(0, 30)
@@ -432,7 +530,7 @@ function renderCompanyDetail(key) {
       <span class="inspector-label">Company pathway</span>
       <h2>${escapeHtml(display(primary.company))}</h2>
       <p class="inspector-role">${roles.length} sourced role${roles.length === 1 ? "" : "s"} across ${providers.join(", ")}</p>
-      <div class="inspector-chips"><span class="detail-chip">${active} likely active</span><span class="detail-chip">${providers.join(" + ")}</span></div>
+      <div class="inspector-chips"><span class="detail-chip">${active} verified recently</span><span class="detail-chip">${providers.join(" + ")}</span></div>
     </div>
     <div class="detail-actions">
       <a class="detail-button primary" href="${escapeHtml(boardUrl(primary))}" target="_blank" rel="noreferrer">Browse company jobs ↗</a>
@@ -455,7 +553,7 @@ function renderRoleDetail(id) {
   const relatedMarkup = relatedRoles.map((item) => `
     <button class="company-role related-role" data-related-id="${escapeHtml(item.record_id)}" type="button">
       <strong>${escapeHtml(display(item.role))}</strong>
-      <span>${escapeHtml(display(item.location, "Location not listed"))} · ${escapeHtml(similarityReason(row, item))}</span>
+      <span>${escapeHtml(display(item.location, "Location not listed"))} · ${escapeHtml(similarityReason(row, item))} · ${escapeHtml(freshnessLabel(item))}</span>
     </button>`).join("");
 
   elements.detail.innerHTML = `
@@ -464,7 +562,7 @@ function renderRoleDetail(id) {
       <span class="inspector-label">${escapeHtml(providerName(row))} · direct opportunity</span>
       <h2>${escapeHtml(display(row.company))}</h2>
       <p class="inspector-role">${escapeHtml(display(row.role))}</p>
-      <div class="inspector-chips"><span class="detail-chip">${escapeHtml(laneName(row))}</span><span class="detail-chip">${escapeHtml(statusLabels[state])}</span><span class="detail-chip">${isInactive(row) ? "Recheck link" : "Sourced link"}</span></div>
+      <div class="inspector-chips"><span class="detail-chip">${escapeHtml(laneName(row))}</span><span class="detail-chip">${escapeHtml(statusLabels[state])}</span><span class="detail-chip">${escapeHtml(freshnessLabel(row))}</span></div>
     </div>
     <div class="detail-actions">
       <a class="detail-button primary" href="${escapeHtml(roleUrl(row))}" target="_blank" rel="noreferrer">Open application ↗</a>
@@ -475,7 +573,7 @@ function renderRoleDetail(id) {
     <section class="detail-section"><h3>Application fit</h3><div class="detail-list">
       ${detailRow("Location", display(row.location))}${detailRow("Role family", laneName(row))}
       ${staticMode ? "" : detailRow("Resume", resumeName(row))}${detailRow("First sourced", formatDate(row.first_seen))}
-      ${detailRow("Platform", providerName(row))}${detailRow("Other roles", `${Math.max(companyRoles.length - 1, 0)} at this company`)}
+      ${detailRow("Platform", providerName(row))}${detailRow("Freshness", freshnessLabel(row))}${detailRow("Other roles", `${Math.max(companyRoles.length - 1, 0)} at this company`)}
     </div></section>
     <section class="detail-section"><h3>Your application workflow</h3><div class="review-grid">
       <label><span>State</span><select id="reviewStatus">${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${state === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
@@ -498,7 +596,7 @@ function detailRow(label, value) {
 }
 
 function detailMeta(row) {
-  return `<section class="detail-section"><h3>Source record</h3><div class="detail-list">${detailRow("Last seen", formatDate(row.last_seen))}${detailRow("Batch", display(row.source_batches_display, "Consolidated history"))}</div></section>`;
+  return `<section class="detail-section"><h3>Source record</h3><div class="detail-list">${detailRow("Last sourced", formatDate(row.last_seen))}${detailRow("Last verified open", formatDate(row.last_verified))}${detailRow("Last check attempted", formatDate(row.last_attempted))}${detailRow("Check method", display(row.check_method, "Not checked").replaceAll("_", " "))}</div>${row.inactive_reason ? `<p class="tracker-note">${escapeHtml(row.inactive_reason)}</p>` : ""}</section>`;
 }
 
 function renderEmptyDetail() {
@@ -507,7 +605,7 @@ function renderEmptyDetail() {
 }
 
 function wireInspector() {
-  elements.detail.querySelector(".close-inspector")?.addEventListener("click", () => elements.detail.classList.remove("open"));
+  elements.detail.querySelector(".close-inspector")?.addEventListener("click", closeInspector);
   elements.detail.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyLink(button.dataset.copy)));
   elements.detail.querySelectorAll("[data-save-id]").forEach((button) => button.addEventListener("click", () => toggleSaved(button.dataset.saveId)));
   elements.detail.querySelectorAll("[data-related-id]").forEach((button) => button.addEventListener("click", () => {
@@ -566,7 +664,8 @@ async function toggleSaved(id) {
   if (!row) return;
   const next = ["saved", "ready", "applying"].includes(applicationState(row)) ? "new" : "saved";
   try {
-    await persistReview(row, row.comment || "", next);
+    const draft = selectedId === id ? document.getElementById("commentBox")?.value : null;
+    await persistReview(row, draft ?? row.comment ?? "", next);
     showToast(next === "saved" ? "Saved to your shortlist" : "Removed from shortlist");
     applyFilters({ preserveView: true });
     if (selectedId === id) renderRoleDetail(id);
@@ -586,15 +685,16 @@ async function copyLink(value) {
 }
 
 function updateCounts() {
-  const companies = new Set(allRecords.map(companyKey));
-  const active = allRecords.filter((row) => !isInactive(row)).length;
+  const aiRecords = allRecords.filter(isAiFocused);
+  const companies = new Set(aiRecords.map(companyKey));
+  const recent = aiRecords.filter((row) => freshnessState(row) === "fresh").length;
   const applied = allRecords.filter((row) => ["applied", "interviewing"].includes(applicationState(row))).length;
-  const directBoards = allRecords.filter((row) => row.board_confidence === "exact").length;
+  const directBoards = new Set(aiRecords.filter((row) => row.board_confidence === "exact").map(boardUrl)).size;
   elements.stats.innerHTML = `
-    <div class="signal"><strong>${companies.size.toLocaleString()}</strong><span>Companies</span><i></i></div>
-    <div class="signal"><strong>${allRecords.length.toLocaleString()}</strong><span>Sourced roles</span><i></i></div>
-    <div class="signal"><strong>${active.toLocaleString()}</strong><span>Open-link candidates</span><i></i></div>
-    <div class="signal"><strong>${directBoards.toLocaleString()}</strong><span>Direct ATS paths</span><i></i></div>`;
+    <div class="signal"><strong>${companies.size.toLocaleString()}</strong><span>Companies in AI index</span><i></i></div>
+    <div class="signal"><strong>${aiRecords.length.toLocaleString()}</strong><span>AI-focused roles</span><i></i></div>
+    <div class="signal"><strong>${recent.toLocaleString()}</strong><span>Verified within 14 days</span><i></i></div>
+    <div class="signal"><strong>${directBoards.toLocaleString()}</strong><span>Direct company boards</span><i></i></div>`;
   elements.allCount.textContent = allRecords.length.toLocaleString();
   elements.savedCount.textContent = allRecords.filter((row) => ["saved", "ready", "applying"].includes(applicationState(row))).length.toLocaleString();
   elements.appliedCount.textContent = applied.toLocaleString();
@@ -602,28 +702,36 @@ function updateCounts() {
 
 function renderActiveFilters() {
   const chips = [];
+  if (elements.aiOnly.checked) chips.push("AI-focused roles");
   if (elements.search.value.trim()) chips.push(`Search: ${elements.search.value.trim()}`);
   if (elements.title.value.trim()) chips.push(`Title: ${elements.title.value.trim()}`);
   if (locationMode !== "all") chips.push(locationMode === "nyc" ? "New York City" : "Remote");
   if (elements.lane.value !== "all") chips.push(laneLabels[elements.lane.value] || elements.lane.value);
   if (elements.provider.value !== "all") chips.push(providerName({ provider: elements.provider.value }));
+  if (elements.freshness.value !== "all") chips.push(freshnessLabels[elements.freshness.value]);
   if (elements.resume.value !== "all") chips.push(resumeLabels[elements.resume.value] || elements.resume.value);
   if (elements.status.value !== "all") chips.push(statusLabels[elements.status.value]);
-  if (elements.activeOnly.checked) chips.push("Active links only");
+  if (elements.activeOnly.checked) chips.push("Known inactive hidden");
   elements.activeFilters.innerHTML = chips.map((chip) => `<span class="filter-chip">${escapeHtml(chip)}</span>`).join("");
 }
 
 function clearFilters() {
   elements.search.value = "";
+  elements.aiOnly.checked = true;
   elements.title.value = "";
   elements.lane.value = "all";
   elements.provider.value = "all";
+  elements.freshness.value = "all";
   elements.resume.value = "all";
   elements.status.value = "all";
-  elements.activeOnly.checked = false;
+  elements.activeOnly.checked = true;
   locationMode = "all";
-  document.querySelectorAll("[data-location]").forEach((button) => button.classList.toggle("active", button.dataset.location === "all"));
-  setViewMode(scopeMode === "all" ? "companies" : "roles", false);
+  document.querySelectorAll("[data-location]").forEach((button) => {
+    const active = button.dataset.location === "all";
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  setViewMode("roles", false);
   applyFilters({ preserveView: true });
 }
 
@@ -650,14 +758,27 @@ function showToast(message) {
 }
 
 function wireEvents() {
-  [elements.search, elements.title, elements.lane, elements.provider, elements.resume, elements.status, elements.activeOnly].forEach((control) => {
-    control.addEventListener("input", applyFilters);
-    control.addEventListener("change", applyFilters);
+  elements.detailBackdrop.addEventListener("click", closeInspector);
+  window.addEventListener("resize", syncInspectorMode);
+  [elements.search, elements.title].forEach((control) => control.addEventListener("input", applyFilters));
+  [elements.aiOnly, elements.lane, elements.provider, elements.resume, elements.status].forEach((control) => control.addEventListener("change", applyFilters));
+  elements.freshness.addEventListener("change", () => {
+    if (elements.freshness.value === "inactive") elements.activeOnly.checked = false;
+    applyFilters();
+  });
+  elements.activeOnly.addEventListener("change", () => {
+    if (elements.activeOnly.checked && elements.freshness.value === "inactive") elements.freshness.value = "all";
+    applyFilters();
   });
   elements.sort.addEventListener("change", () => applyFilters({ preserveView: true }));
   elements.clearFilters.addEventListener("click", clearFilters);
   elements.exportButton.addEventListener("click", exportView);
-  elements.filterToggle.addEventListener("click", () => elements.filtersPane.classList.toggle("open"));
+  elements.filterToggle.addEventListener("click", () => {
+    const isOpen = elements.filtersPane.classList.toggle("open");
+    elements.filterToggle.setAttribute("aria-expanded", String(isOpen));
+    elements.filterToggle.setAttribute("aria-label", isOpen ? "Hide filters" : "Show filters");
+    if (isOpen) elements.filtersPane.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
   elements.loadMore.addEventListener("click", () => { visibleLimit += 60; renderResults(); });
 
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => {
@@ -665,7 +786,11 @@ function wireEvents() {
   }));
   document.querySelectorAll("[data-location]").forEach((button) => button.addEventListener("click", () => {
     locationMode = button.dataset.location;
-    document.querySelectorAll("[data-location]").forEach((item) => item.classList.toggle("active", item === button));
+    document.querySelectorAll("[data-location]").forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
     applyFilters();
   }));
   document.querySelectorAll("[data-scope]").forEach((button) => button.addEventListener("click", () => {
@@ -674,11 +799,17 @@ function wireEvents() {
     applyFilters();
   }));
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Tab" && !elements.detailBackdrop.hidden) {
+      const controls = [...elements.detail.querySelectorAll("a[href], button, input, select, textarea")].filter((node) => !node.disabled && node.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
     if (event.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
       event.preventDefault();
       elements.search.focus();
     }
-    if (event.key === "Escape") elements.detail.classList.remove("open");
+    if (event.key === "Escape" && elements.detail.classList.contains("open")) closeInspector();
   });
 }
 
