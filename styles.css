@@ -488,3 +488,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+:root .agent-invite { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(23,55,45,.16); max-width: 650px; }
+:root .agent-invite p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
+:root .agent-invite > span { display: inline-block; font-size: 12px; margin: 8px 0 0 10px; opacity: .75; }
