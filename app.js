@@ -567,6 +567,7 @@ function renderRoleDetail(id) {
     <div class="detail-actions">
       <a class="detail-button primary" href="${escapeHtml(roleUrl(row))}" target="_blank" rel="noreferrer">Open application ↗</a>
       <a class="detail-button" href="${escapeHtml(boardUrl(row))}" target="_blank" rel="noreferrer">All company jobs</a>
+      <a class="detail-button" href="https://role-atlas-agent.andi-qshehu.chatgpt.site/portal?${escapeHtml(new URLSearchParams({ url: roleUrl(row), company: display(row.company), title: display(row.role), location: display(row.location, "") }).toString())}">Track in my account</a>
       <button class="detail-button copy-action" data-copy="${escapeHtml(roleUrl(row))}" type="button">Copy role link</button>
       <button class="detail-button save-action ${["saved", "ready", "applying"].includes(state) ? "saved" : ""}" data-save-id="${escapeHtml(row.record_id)}" type="button">${["saved", "ready", "applying"].includes(state) ? "Saved ◆" : "Save ◇"}</button>
     </div>
@@ -579,6 +580,7 @@ function renderRoleDetail(id) {
       <label><span>State</span><select id="reviewStatus">${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${state === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
       <label><span>Private notes</span><textarea id="commentBox" placeholder="Contacts, fit, follow-up date, application answers...">${escapeHtml(row.comment || "")}</textarea></label>
       <div class="save-row"><button class="save-button" id="saveReview" type="button">Save update</button><span class="save-meta">${row.updated_at ? `Saved ${escapeHtml(formatDate(row.updated_at))}` : "Stored locally"}</span></div>
+      ${staticMode ? '<p class="tracker-note">These notes stay in this browser. Use “Track in my account” above to keep a separate, synced workspace. Signing in is optional.</p>' : ''}
     </div></section>
     ${row.notes ? `<section class="detail-section"><h3>Research notes</h3><p class="tracker-note">${escapeHtml(row.notes)}</p></section>` : ""}
     ${relatedRoles.length
