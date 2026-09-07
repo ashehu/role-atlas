@@ -173,6 +173,28 @@ function isAiFocused(row) {
   return coreAiLanes.has(String(row.lane || "")) || aiRolePattern.test(String(row.role || ""));
 }
 
+function selectCollection(collection, render = true) {
+  if (!["ai", "gtm", "all"].includes(collection)) return;
+  elements.aiOnly.checked = collection === "ai";
+  elements.lane.value = collection === "gtm" ? "gtm_growth" : "all";
+  if (render) applyFilters();
+}
+
+function syncCollections() {
+  const current = elements.lane.value === "gtm_growth" && !elements.aiOnly.checked
+    ? "gtm" : elements.lane.value === "all" ? (elements.aiOnly.checked ? "ai" : "all") : "";
+  document.querySelectorAll("[data-collection]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.collection === current));
+  });
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  // Employer text and personal notes must not become spreadsheet formulas.
+  const safe = /^[\s]*[=+@-]|^[\t\r\n]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
 function parseRecordDate(value) {
   if (!value) return null;
   const date = new Date(String(value).slice(0, 10) + "T12:00:00");
@@ -362,6 +384,7 @@ function applyFilters({ preserveView = false } = {}) {
   }));
 
   visibleLimit = 60;
+  syncCollections();
   renderActiveFilters();
   renderResults();
   updateCounts();
@@ -719,14 +742,14 @@ function renderActiveFilters() {
 
 function clearFilters() {
   elements.search.value = "";
-  elements.aiOnly.checked = true;
+  elements.aiOnly.checked = scopeMode === "all";
   elements.title.value = "";
   elements.lane.value = "all";
   elements.provider.value = "all";
   elements.freshness.value = "all";
   elements.resume.value = "all";
   elements.status.value = "all";
-  elements.activeOnly.checked = true;
+  elements.activeOnly.checked = scopeMode === "all";
   locationMode = "all";
   document.querySelectorAll("[data-location]").forEach((button) => {
     const active = button.dataset.location === "all";
@@ -739,10 +762,9 @@ function clearFilters() {
 
 function exportView() {
   const columns = ["company", "role", "location", "provider", "lane", "resume", "application_state", "company_board_url", "role_url", "notes", "comment"];
-  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const lines = [columns.join(","), ...filteredRecords.map((row) => [
     row.company, row.role, row.location, providerName(row), laneName(row), resumeName(row), applicationState(row), boardUrl(row), roleUrl(row), row.notes, row.comment,
-  ].map(quote).join(","))];
+  ].map(csvCell).join(","))];
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -763,7 +785,16 @@ function wireEvents() {
   elements.detailBackdrop.addEventListener("click", closeInspector);
   window.addEventListener("resize", syncInspectorMode);
   [elements.search, elements.title].forEach((control) => control.addEventListener("input", applyFilters));
-  [elements.aiOnly, elements.lane, elements.provider, elements.resume, elements.status].forEach((control) => control.addEventListener("change", applyFilters));
+  [elements.provider, elements.resume, elements.status].forEach((control) => control.addEventListener("change", applyFilters));
+  elements.lane.addEventListener("change", () => {
+    if (elements.lane.value === "gtm_growth") elements.aiOnly.checked = false;
+    applyFilters();
+  });
+  elements.aiOnly.addEventListener("change", () => {
+    if (elements.aiOnly.checked && elements.lane.value === "gtm_growth") elements.lane.value = "all";
+    applyFilters();
+  });
+  document.querySelectorAll("[data-collection]").forEach((button) => button.addEventListener("click", () => selectCollection(button.dataset.collection)));
   elements.freshness.addEventListener("change", () => {
     if (elements.freshness.value === "inactive") elements.activeOnly.checked = false;
     applyFilters();
@@ -798,7 +829,7 @@ function wireEvents() {
   document.querySelectorAll("[data-scope]").forEach((button) => button.addEventListener("click", () => {
     scopeMode = button.dataset.scope;
     document.querySelectorAll("[data-scope]").forEach((item) => item.classList.toggle("active", item === button));
-    applyFilters();
+    clearFilters();
   }));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Tab" && !elements.detailBackdrop.hidden) {
@@ -837,9 +868,11 @@ async function init() {
     elements.datasetDate.textContent = formatDate(meta.dataset_date || meta.generated_at).replace(/, \d{4}$/, "");
     initFilters();
     wireEvents();
+    selectCollection(new URLSearchParams(window.location.search).get("collection"), false);
     applyFilters();
   } catch (error) {
-    elements.results.innerHTML = `<div class="no-results"><strong>Could not load the role index</strong><p>${escapeHtml(error.message)}</p></div>`;
+    elements.results.innerHTML = `<div class="no-results"><strong>Could not load the role index</strong><p>${escapeHtml(error.message)}</p><button class="ghost-button" id="retryIndex" type="button">Try again</button></div>`;
+    document.getElementById("retryIndex").addEventListener("click", () => window.location.reload());
   }
 }
 

@@ -499,3 +499,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 840px) {
   .agent-invite { width: 100%; max-width: 480px; }
 }
+/* Keep career focus visible without opening the mobile filter drawer. */
+.collection-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 24px 0 12px; }
+.collection-picker > span { font-size: 14px; margin-right: 4px; }
+.collection-picker button { min-height: 44px; padding: 10px 16px; border: 1px solid #17372d50; border-radius: 999px; background: transparent; color: #17372d; font: inherit; font-size: 14px; cursor: pointer; }
+.collection-picker button[aria-pressed="true"] { background: #17372d; color: #fffefa; }

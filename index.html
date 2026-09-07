@@ -20,17 +20,17 @@
             <span class="nav-icon">⌁</span>Explore<span class="nav-count" id="allCount">0</span>
           </button>
           <button class="nav-item" data-scope="saved" type="button">
-            <span class="nav-icon">◇</span>Saved<span class="nav-count" id="savedCount">0</span>
+            <span class="nav-icon">◇</span>Saved here<span class="nav-count" id="savedCount">0</span>
           </button>
           <button class="nav-item" data-scope="applied" type="button">
-            <span class="nav-icon">✓</span>Applied<span class="nav-count" id="appliedCount">0</span>
+            <span class="nav-icon">✓</span>Applied here<span class="nav-count" id="appliedCount">0</span>
           </button>
         </nav>
         <div class="rail-card">
           <span class="live-dot"></span>
-          <p class="rail-card-label">Your private workspace</p>
-          <strong>No account required</strong>
-          <p>Notes and application states stay in this browser. Export to keep a backup.</p>
+          <p class="rail-card-label">Saved in this browser</p>
+          <strong>Browsing stays free</strong>
+          <p>These lists do not sync to your account. Open a role and choose “Track in my account” to save across devices.</p>
         </div>
         <div class="rail-footer">
           <span>Latest role added</span>
@@ -64,6 +64,12 @@
           </aside>
         </section>
 
+        <div class="collection-picker" role="group" aria-label="Career focus">
+          <span>Explore</span>
+          <button type="button" data-collection="ai" aria-pressed="true">AI &amp; data</button>
+          <button type="button" data-collection="gtm" aria-pressed="false">GTM &amp; growth</button>
+          <button type="button" data-collection="all" aria-pressed="false">All roles</button>
+        </div>
         <section class="search-panel" aria-label="Search opportunities">
           <label class="search-box" for="searchInput">
             <span class="search-icon" aria-hidden="true">⌕</span>
