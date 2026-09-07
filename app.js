@@ -590,7 +590,7 @@ function renderRoleDetail(id) {
     <div class="detail-actions">
       <a class="detail-button primary" href="${escapeHtml(roleUrl(row))}" target="_blank" rel="noreferrer">Open application ↗</a>
       <a class="detail-button" href="${escapeHtml(boardUrl(row))}" target="_blank" rel="noreferrer">All company jobs</a>
-      <a class="detail-button" href="https://role-atlas-agent.andi-qshehu.chatgpt.site/portal?${escapeHtml(new URLSearchParams({ url: roleUrl(row), company: display(row.company), title: display(row.role), location: display(row.location, "") }).toString())}">Track in my account</a>
+      <a class="detail-button" href="https://role-atlas-agent.andi-qshehu.chatgpt.site/portal?${escapeHtml(new URLSearchParams({ collection: row.lane === "gtm_growth" ? "gtm" : "ai", url: roleUrl(row), company: display(row.company), title: display(row.role), location: display(row.location, "") }).toString())}">Track in my account</a>
       <button class="detail-button copy-action" data-copy="${escapeHtml(roleUrl(row))}" type="button">Copy role link</button>
       <button class="detail-button save-action ${["saved", "ready", "applying"].includes(state) ? "saved" : ""}" data-save-id="${escapeHtml(row.record_id)}" type="button">${["saved", "ready", "applying"].includes(state) ? "Saved ◆" : "Save ◇"}</button>
     </div>
